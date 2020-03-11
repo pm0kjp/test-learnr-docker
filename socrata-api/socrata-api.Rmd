@@ -1,0 +1,150 @@
+---
+title: "Socrata API Tips and Tricks"
+output: 
+ learnr::tutorial:
+    progressive: true
+    allow_skip: true
+    css:
+      - www/bootstrap.min.css
+      - www/flexdashboard.min.css
+      - www/style.css
+runtime: shiny_prerendered
+---
+
+```{r setup, include=FALSE}
+options(digits = 3, scipen = 9999)
+```
+
+## Background
+
+If you work with public data (such as [NYC Open Data](https://opendata.cityofnewyork.us/), the [CDC](https://data.cdc.gov/), or [Open Data Pennsylvania](https://data.pa.gov/)), you'll soon discover that many governmental and non-profit organizations use Socrata to share their data with the public.  Learning about the Socrata Open Data API (SODA) will help you get the data you want to use with the specifications you need.  
+
+Not all open data sites use Socrata (an important example for us at CHOP is that the [City of Philadelphia's Open Data Portal](https://www.opendataphilly.org/) uses a different data sharing platform, the [Comprehensive Knowledge Archive Network (CKAN)](https://ckan.org/), which we'll treat in a different lesson).  But enough data sites do use Socrata that it's helpful to know how the API works.
+
+## Lesson Outcomes
+
+After completing this lesson, you will be able to do the following with a Socrata-powered endpoint:
+
+* Obtain data
+* Throttle data (get only as many rows as you want)
+* Get data based on a filter criteria
+* Get the format of data you want (json, csv)
+
+You'll also understand and be able to explain these terms:
+
+* API
+* Query String
+
+
+## What is an API?  
+
+___API___ stands for ___Application Programming Interface___. It's a way for people or computers to interact with software in a prescribed way. A common and fairly modern type of Web API is based on the REST architecture and are often referred to as "RESTful APIs". 
+
+The details of REST goes beyond the scope of this lesson, but in broad strokes we can define a RESTful API as one that promotes a "resource-oriented" API where URLs map to objects or resources that you can then interact with. It's a simple request / response system that can be as simple or complex as needed. Some APIs will also allow a client to send data as well, for instance, to add to a database.
+
+You may be familiar with the REDCap API -- this is one that gets used a lot at CHOP to allow people to download data and analyze it in an automated way.  If you want to learn more about APIs in general, check out [What is an API](https://education.arcus.chop.edu/what-is-an-api/) on the Arcus Education site.  To learn about the REDCap API, try [Using the REDCap API](https://education.arcus.chop.edu/redcap-api/).
+
+## Why Use an API?
+
+Why use APIs? They provide a structured, consistent way to carry out a process so that it can be automated and standardized. An API provides consistency around a process. Imagine two different people doing the exact same data download task using a manual approach. They will most definitely have a different process for doing the task and likely a different result as well. An API defines and requires a specific structure for input and provides a specific structure for the output.
+
+Specific API use cases might include:
+
+* Getting the latest, most up-to-date data for an application that counts hospital admissions for influenza
+* Requesting, on a news site, only news stories related to public health in Ghana
+* Communicating between code, such as sending success messages or heartbeats
+
+In all of these cases, you want to get predictable results using a method that's easy to reproduce. Let's concentrate for now on the use case of getting fresh data via an API. 
+
+## APIs Mean Fresh Data!
+
+While many data-centric applications allow you to download data by using a form submission and then save it to your computer, that might not be the most useful way to work with data in an ongoing way. 
+
+If your data might change regularly, with more data being added, it's probably smart to add a few lines to your code that get the latest data, instead of depending on a potentially stale CSV in a folder on your computer. 
+
+It's also easier to make a reproducible script that with the push of a button runs and does everything from obtaining data to analyzing it and creating data visualizations, instead of relying on an error-prone, human-executed punch list of instructions with manual steps like:
+
+* Go to https://fake.site/data .
+* Log in using the username:mike and password:mypassword
+* Make sure you've checked the following boxes in the data request page: ...
+* Save the file with the following naming convention: ...
+* Store the file in the sharefile folder within the directory called ...
+* And so on
+* And so on ...
+
+## Knowledge Checkpoint
+
+```{r api_101, echo=FALSE}
+question("Which of the following are true about APIs?",
+         answer("APIs are useful for creating scripts that always use the freshest version of the data possible.", correct = TRUE, message="Yes, this is a common use case for APIs here at CHOP."),
+         answer("APIs are inherently prone to change and are not consistent over time.", correct = FALSE, message = "Actually, part of what makes APIs so useful is that they are very stable and consistent."),
+         answer("API stands for Analysis Protocol Interface.", correct = FALSE, message = "Not quite... Think about the fact that APIs allow you to interact with an application!"),
+         answer("API stands for Application Programming Interface.", correct = TRUE, message = "Exactly right."),
+         random_answer_order = TRUE,
+         allow_retry = TRUE
+)
+```
+
+## Socrata API
+
+Because the Socrata Open Data API (SODA)  is consistent across the many public data sources that employ it, we can learn some of the basic use cases once and be well-equipped to use the same methods in multiple places.  The Socrata Open Data API (SODA)  uses URL query strings (also known as URL queries or URL parameters) to pass the data provider some details about what data you want.  Sometimes in this document we'll use the term "Socrata API", other times we may use "SODA" or just "the API", if the context is clear enough.  However we phrase it, we're talking about the same thing -- the Socrata method for getting data from a public data provider that hosts data on the Internet.
+
+*Aside: Why is this API called "open"?  Because it allows any user to download data without login credentials -- it's, well, open!*
+
+## URL Queries
+
+Consider this URL: https://www.amazon.com/s?k=r+for+data+science&crid=1CZ68952YCOJU&sprefix=r+for+data+sci%2Caps%2C143&ref=nb_sb_ss_i_1_14
+
+You may have seen long URLs like this one, which have question marks, equals signs, and ampersands.  These long query strings generally give specific data -- in this case, I'm asking for a specific book title, which I left in lower case: "r for data science".  Let's take a look at the query string:
+
+`?k=r+for+data+science&crid=1CZ68952YCOJU&sprefix=r+for+data+sci%2Caps%2C143&ref=nb_sb_ss_i_1_14`
+
+These are the keys (variables, named data points) and values we see in the query string:
+
+* "k", which is equal to "r+for+data+science"
+* "crid" (maybe my customer ID?): "1CZ68952YCOJU"
+* "sprefix" (seems to reiterate the book title and a few other things): "r+for+data+sci%2Caps%2C143"
+* "ref", which may be some code about my search history or how I got to this page: "nb_sb_ss_i_1_14"
+
+You'll notice that a query string starts with a `?` and is followed by key-value pairs with the format "key=value".  There are no spaces allowed, which is why URLs will use things like plus signs or `%20` to indicate spaces.  Between key-value pairs, we add an ampersand (`&`), and can string together many key-value pairs in this way.
+
+It's important to be comfortable with query strings like the one above so that you can effectively construct query strings for your work with the Socrata API.
+
+## Query String Knowledge Checkpoint
+
+For the next question, please consider this URL:
+
+<pre>
+https://www.google.com/search?sxsrf=ACYBGNSvlnNLrqWaPbbrBVhZlrbB3ho6Hg%3A1579615627755&source=hp&ei=iwUnXuOkK4rwsQX_467oBA&q=stack+overflow+pandas+dataframe&oq=stack+overflow+pandas+dataframe
+</pre>
+
+```{r query_strings_1, echo=FALSE}
+question("How many key-value pairs are in the query string?",
+  answer("1",  message = "That's too low.  Try counting the equals signs or ampersands to help you figure out how many key-value pairs there are."),
+  answer("3", message = "Not quite!  Try counting the equals signs or ampersands to help you figure out how many key-value pairs there are."),
+  answer("5", correct = TRUE, message = "Exactly.  The keys are 'sxsrf', 'source', 'ei', 'q', and 'oq'."),
+  answer("7", message = "Whoops, that's too many, take another look! Try counting the equals signs or ampersands to help you figure out how many key-value pairs there are."),
+random_answer_order = TRUE,
+         allow_retry = TRUE
+)
+```
+
+```{r query_strings_2, echo=FALSE}
+question("Which of the following are true about URL query strings?",
+         answer("Query strings may also be referred to as 'URL parameters', 'query parameters', 'URL parameters', or other similar names.", 
+                correct = TRUE, 
+                message = "Yes, the terminology around this is a little bit variable!"),
+         answer("You can't put spaces in a URL.", 
+                correct = TRUE, 
+                message = "That's right.  The html encoding for a space is %20, but you'll also see other kinds of codes, like plus signs, to indicate spaces."),
+         answer("The start of a query string is indicated by the @ symbol.", 
+                correct = FALSE, message = "Actually, the start of a query string is marked by a question mark (?), which makes sense, when we consider that we're creating a query!"),
+         answer("Between key value pairs, a query string has a '+' to indicate the start of a new key-value pair.", correct = FALSE, message = "Between key-value pairs, we see an ampersand (&), which indicates the start of a new key-value pair."),
+         random_answer_order = TRUE,
+         allow_retry = TRUE
+)
+```
+
+## Obtaining Data
+
+Let's consider the [CDC Botulism data set](https://data.cdc.gov/Foodborne-Waterborne-and-Related-Diseases/Botulism/66i6-hisz).  When we go to that page, we see various ways to interact with the data, including viewing it, exporting it, visualizing it, and using the API:
